@@ -9,6 +9,8 @@ import {
   Interface,
   isAddress,
   ZeroAddress,
+  parseEther,
+  parseUnits,
 } from "ethers";
 
 export const useStakingVault = (walletAddress: string | null) => {
@@ -27,19 +29,19 @@ export const useStakingVault = (walletAddress: string | null) => {
   // 1. Instantiate read-only Contract or Signer-connected Contract
   const vaultContract = useMemo(
     () => getContract(vault.address, vault.abi, true),
-    [getContract]
+    [getContract],
   );
   const mgoContract = useMemo(
     () => getContract(mgo.address, mgo.abi, true),
-    [getContract]
+    [getContract],
   );
   const multicall2Contract = useMemo(
     () => getContract(multicall2.address, multicall2.abi, true),
-    [getContract]
+    [getContract],
   );
   const stkContract = useMemo(
     () => getContract(stk.address, stk.abi, true),
-    [getContract]
+    [getContract],
   );
 
   // define the interface
@@ -47,7 +49,7 @@ export const useStakingVault = (walletAddress: string | null) => {
 
   const validAddress = useMemo(
     () => (isAddress(walletAddress) ? walletAddress : ZeroAddress),
-    []
+    [],
   );
 
   // 2. Fetch pool count and iterate over poolInfo
@@ -57,7 +59,7 @@ export const useStakingVault = (walletAddress: string | null) => {
       vaultContract: Contract,
       mgoContract: Contract,
       stkContract: Contract,
-      vault: { address: string; abi: any }
+      vault: { address: string; abi: any },
     ) => {
       console.log("Helloooooooo");
       let pools: PoolData[] = [];
@@ -84,12 +86,12 @@ export const useStakingVault = (walletAddress: string | null) => {
         (id: number) => ({
           target: vault.address,
           callData: intfce.encodeFunctionData("poolInfo", [id]),
-        })
+        }),
       );
 
       const userInfoCalls = Array.from(
         { length: Number(poolLength) },
-        (_, i) => i
+        (_, i) => i,
       ).map((id: number) => ({
         target: vault.address,
         callData: intfce.encodeFunctionData("userInfo", [id, validAddress]),
@@ -97,7 +99,7 @@ export const useStakingVault = (walletAddress: string | null) => {
 
       const pendingRewardCalls = Array.from(
         { length: Number(poolLength) },
-        (_, i) => i
+        (_, i) => i,
       ).map((id: number) => ({
         target: vault.address,
         callData: intfce.encodeFunctionData("pendingReward", [
@@ -124,15 +126,15 @@ export const useStakingVault = (walletAddress: string | null) => {
 
       // decode the results of the aggregate calls
       const decodedPools = poolsResult.map((result: string) =>
-        intfce.decodeFunctionResult("poolInfo", result)
+        intfce.decodeFunctionResult("poolInfo", result),
       );
 
       const decodedUserInfo = userInfoResult.map((result: string) =>
-        intfce.decodeFunctionResult("userInfo", result)
+        intfce.decodeFunctionResult("userInfo", result),
       );
 
       const decodedPendingRewards = pendingRewardResult.map((result: string) =>
-        intfce.decodeFunctionResult("pendingReward", result)
+        intfce.decodeFunctionResult("pendingReward", result),
       );
 
       console.log("Decoded Pools", decodedPools);
@@ -144,7 +146,7 @@ export const useStakingVault = (walletAddress: string | null) => {
         stakingTokenAddress: String(proxy.stakingToken),
         rewardRatePerSecond: formatUnits(
           proxy.rewardRatePerSecond,
-          mgoDecimals
+          mgoDecimals,
         ),
         lastRewardTime: Number(proxy.lastRewardTime),
         accRewardPerShare: Number(proxy.accRewardPerShare),
@@ -155,14 +157,14 @@ export const useStakingVault = (walletAddress: string | null) => {
         userStakedAmount: formatUnits(decodedUserInfo[idx].amount, stkDecimals),
         userPendingReward: formatUnits(
           decodedPendingRewards[idx][0],
-          mgoDecimals
+          mgoDecimals,
         ),
         userTokenBalance: formatUnits(userTokenBalance, stkDecimals),
       }));
 
       setPools(fetchedPools);
     },
-    []
+    [],
   );
 
   useEffect(() => {
@@ -220,13 +222,13 @@ export const useStakingVault = (walletAddress: string | null) => {
           vaultContract,
           mgoContract,
           stkContract,
-          vault
+          vault,
         );
       } catch (error: any) {
         setError(
           error && error.message
             ? error.message
-            : "Failed to fetch staking pools; an unexpected error occured while fetching staking pools."
+            : "Failed to fetch staking pools; an unexpected error occured while fetching staking pools.",
         );
       } finally {
         setIsLoading(false);
@@ -248,24 +250,76 @@ export const useStakingVault = (walletAddress: string | null) => {
 
   // 3. Fetch token symbol and decimals using ERC20 contract instance
   // 4. Perform Multicall/Promise.all for pendingReward and userInfo
-  
+
   // 5. Setup Ethers event listeners (vaultContract.on('Staked', ...)) for live UI updates
   // 6. Handle errors (user rejection, insufficient allowance, execution revert)
 
   const stakeTokens = async (
     poolId: number,
     amount: string,
-    isEth: boolean
+    isEth: boolean,
   ) => {
-    console.log(
-      "Class TODO: Handle ERC20 approval if needed, then call vault.stake()"
-    );
+    if (!vaultContract || !stkContract || !address) {
+      throw new Error("Wallet or contract is not connected");
+    }
+
+    if (!amount || Number(amount) <= 0) {
+      throw new Error("Enter a valid amount");
+    }
+
+    if (isEth) {
+      const amountInWei = parseEther(amount);
+
+      const tx = await vaultContract.stake(poolId, 0, {
+        value: amountInWei,
+      });
+
+      await tx.wait();
+    } else {
+      const decimals = await stkContract.decimals();
+      const amountInUnits = parseUnits(amount, decimals);
+
+      const allowance = await stkContract.allowance(address, vault.address);
+
+      if (allowance < amountInUnits) {
+        const approvalTx = await stkContract.approve(
+          vault.address,
+          amountInUnits,
+        );
+
+        await approvalTx.wait();
+      }
+
+      const tx = await vaultContract.stake(poolId, amountInUnits);
+
+      await tx.wait();
+    }
   };
 
   const withdrawTokens = async (poolId: number, amount: string) => {
-    console.log("Class TODO: Call vault.withdraw() with ethers.parseUnits()");
-  };
+    if (!vaultContract || !stkContract) {
+      throw new Error("Contract is not connected");
+    }
 
+    if (!amount || Number(amount) <= 0) {
+      throw new Error("Enter a valid amount");
+    }
+
+    const pool = await vaultContract.poolInfo(poolId);
+
+    let amountInUnits;
+
+    if (pool.isEthPool) {
+      amountInUnits = parseEther(amount);
+    } else {
+      const decimals = await stkContract.decimals();
+      amountInUnits = parseUnits(amount, decimals);
+    }
+
+    const tx = await vaultContract.withdraw(poolId, amountInUnits);
+
+    await tx.wait();
+  };
   const claimRewards = async (poolId: number) => {
     console.log("Class TODO: Call vault.claimReward() and handle tx response");
   };

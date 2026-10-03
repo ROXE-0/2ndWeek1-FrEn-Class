@@ -80,7 +80,7 @@ export const useWalletConnection = () => {
         setBalance(null);
       }
     },
-    [browserProvider]
+    [browserProvider],
   );
 
   const getBalance = useCallback(async (): Promise<void> => {
@@ -119,7 +119,7 @@ export const useWalletConnection = () => {
       const chain = chains[targetChainId];
       if (!chain) {
         throw new Error(
-          `Chain ${targetChainId} is not supported by this application.`
+          `Chain ${targetChainId} is not supported by this application.`,
         );
       }
 
@@ -156,7 +156,7 @@ export const useWalletConnection = () => {
         }
       }
     },
-    [provider]
+    [provider],
   );
 
   const validateChainId = useCallback((): boolean => {
@@ -175,7 +175,7 @@ export const useWalletConnection = () => {
     try {
       const accounts = (await browserProvider.send(
         "eth_requestAccounts",
-        []
+        [],
       )) as string[];
       await setAccountAndSigner(accounts);
       const network = await browserProvider.getNetwork();
@@ -184,7 +184,7 @@ export const useWalletConnection = () => {
       setError(
         error && error.message
           ? error.message
-          : "An unexpected error occured, please try again"
+          : "An unexpected error occured, please try again",
       );
     } finally {
       setIsConnecting(false);
@@ -213,12 +213,18 @@ export const useWalletConnection = () => {
     async (accounts: string[]): Promise<void> => {
       await setAccountAndSigner(accounts);
 
-      if (accounts.length == 0) {
+      if (accounts.length === 0) {
         setChainId(null);
         setBalance(null);
+        return;
+      }
+
+      if (browserProvider) {
+        const network = await browserProvider.getNetwork();
+        setChainId(Number(network.chainId));
       }
     },
-    [setAccountAndSigner]
+    [setAccountAndSigner, browserProvider],
   );
 
   const handleChainChanged = useCallback(
@@ -230,7 +236,7 @@ export const useWalletConnection = () => {
         setBrowserProvider(new BrowserProvider(provider as any));
       }
     },
-    [provider]
+    [provider],
   );
 
   const handleDisconnect = useCallback(
@@ -239,7 +245,7 @@ export const useWalletConnection = () => {
       await disconnectWallet();
       console.log("handle disconnect successful...");
     },
-    [disconnectWallet]
+    [disconnectWallet],
   );
 
   useEffect(() => {
@@ -251,7 +257,7 @@ export const useWalletConnection = () => {
       console.log("browserProvider is nowwwwwwwwww set....");
       const accounts = (await browserProvider.send(
         "eth_accounts",
-        []
+        [],
       )) as string[];
 
       if (accounts.length == 0) {
@@ -308,7 +314,7 @@ export const useWalletConnection = () => {
 
     window.addEventListener(
       EIP6963AnnounceProvider,
-      handleProviderAnnouncement
+      handleProviderAnnouncement,
     );
 
     window.dispatchEvent(new Event(EIP6963RequestProvider));
@@ -316,7 +322,7 @@ export const useWalletConnection = () => {
     return () => {
       window.removeEventListener(
         EIP6963AnnounceProvider,
-        handleProviderAnnouncement
+        handleProviderAnnouncement,
       );
     };
   }, []);
